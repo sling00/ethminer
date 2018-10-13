@@ -265,8 +265,10 @@ CLMiner::CLMiner(unsigned _index) : Miner("cl-", _index) {}
 
 CLMiner::~CLMiner()
 {
+    DEV_BUILD_LOG_PROGRAMFLOW(cllog, "cl-" << m_index << " CLMiner::~CLMiner() begin");
     stopWorking();
     kick_miner();
+    DEV_BUILD_LOG_PROGRAMFLOW(cllog, "cl-" << m_index << " CLMiner::~CLMiner() end");
 }
 
 // NOTE: The following struct must match the one defined in
@@ -411,14 +413,14 @@ void CLMiner::workLoop()
                             h256 mix;
                             memcpy(mix.data(), (char*)results.rslt[i].mix,
                                 sizeof(results.rslt[i].mix));
-                            Farm::f().submitProof(Solution{nonce, mix, current, false}, Index());
+                            Farm::f().submitProof(Solution{nonce, mix, current, false, Index()});
                         }
                         else
                         {
                             Result r = EthashAux::eval(current.epoch, current.header, nonce);
                             if (r.value <= current.boundary)
                                 Farm::f().submitProof(
-                                    Solution{nonce, r.mixHash, current, false}, Index());
+                                    Solution{nonce, r.mixHash, current, false, Index()});
                             else
                             {
                                 Farm::f().failedSolution(Index());

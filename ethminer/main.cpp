@@ -58,7 +58,7 @@ struct MiningChannel : public LogChannel
 #include <ethminer/DBusInt.h>
 #endif
 
-bool g_running = false;
+bool g_got_exit_signal = false;
 
 class MinerCLI
 {
@@ -110,7 +110,7 @@ public:
     static void signalHandler(int sig)
     {
         (void)sig;
-        g_running = false;
+        g_got_exit_signal = true;
     }
 #if API_CORE
     static bool ParseBind(const std::string& inaddr, std::string& outaddr, int& outport,
@@ -213,8 +213,8 @@ public:
                    << ", log per GPU solutions = " << LOG_PER_GPU;
 #ifdef DEV_BUILD
         logOptions << ", log connection messages = " << LOG_CONNECT
-                   << ", log switch delay = " << LOG_SWITCH
-                   << ", log submit delay = " << LOG_SUBMIT;
+                   << ", log switch delay = " << LOG_SWITCH << ", log submit delay = " << LOG_SUBMIT
+                   << ", log program flow = " << LOG_PROGRAMFLOW;
 #endif
         app.add_option("-v,--verbosity", g_logOptions, logOptions.str(), true)
             ->group(CommonGroup)
@@ -301,8 +301,8 @@ public:
             ->check(CLI::Range(-65535, 65535));
 
         app.add_option("--api-password", m_api_password,
-               "Set the password to protect interaction with API server. If not set, any connection "
-               "is granted access. "
+               "Set the password to protect interaction with API server. If not set, any "
+               "connection is granted access. "
                "Be advised passwords are sent unencrypted over plain TCP!!")
             ->group(APIGroup);
 
@@ -532,7 +532,22 @@ public:
                "color output."
             << endl
             << "    SYSLOG   - set to any value to strip time and disable color from output, "
-               "for logging under systemd";
+               "for logging under systemd"
+#ifndef _WIN32
+            << endl
+            << "    SSL_CERT_FILE - full path to your CA certificates file if elsewhere than "
+               "/etc/ssl/certs/ca-certificates.crt"
+#endif
+            << endl
+            << "    SSL_NOVERIFY - set to any value to to disable the verification chain for"
+            << endl
+            << "                   certificates. WARNING ! Disabling certificate validation"
+            << endl
+            << "                   declines every security implied in connecting to a secured"
+            << endl
+            << "                   SSL/TLS remote endpoint."
+            << endl
+            << "                   USE AT YOU OWN RISK AND ONLY IF YOU KNOW WHAT YOU'RE DOING";
         app.footer(ssHelp.str());
 
         try
@@ -747,7 +762,6 @@ public:
 #endif
         }
 
-        g_running = true;
         signal(SIGINT, MinerCLI::signalHandler);
         signal(SIGTERM, MinerCLI::signalHandler);
 
@@ -789,10 +803,7 @@ private:
             &CUDAMiner::instances, [](unsigned _index) { return new CUDAMiner(_index); }};
 #endif
         Farm::f().setSealers(sealers);
-        Farm::f().onSolutionFound([&](Solution, unsigned const& miner_index) {
-            (void)miner_index;
-            return false;
-        });
+        Farm::f().onSolutionFound([&](Solution) { return false; });
 
         Farm::f().setTStartTStop(m_tstart, m_tstop);
 
@@ -929,23 +940,27 @@ private:
         unsigned interval = m_displayInterval;
 
         // Run CLI in loop
-        while (g_running && PoolManager::p().isRunning())
+        while (!g_got_exit_signal && PoolManager::p().isRunning())
         {
             // Wait at the beginning of the loop to give some time
             // services to start properly. Otherwise we get a "not-connected"
             // message immediately
-            this_thread::sleep_for(chrono::seconds(2));
-            if (interval > 2)
-            {
-                interval -= 2;
+
+            // Split m_displayInterval in 1 second parts to optain a faster exit
+            this_thread::sleep_for(chrono::seconds(1));
+            interval--;
+            if (interval)
                 continue;
-            }
+            interval = m_displayInterval;
+
+            // Display current stats of the farm if it's connected
             if (PoolManager::p().isConnected())
             {
+                auto mp = Farm::f().miningProgress();
                 auto solstats = Farm::f().getSolutionStats();
                 {
                     ostringstream os;
-                    os << Farm::f().miningProgress() << ' ';
+                    os << mp << ' ';
                     if (!(g_logOptions & LOG_PER_GPU))
                         os << solstats << ' ';
                     os << Farm::f().farmLaunchedFormatted();
@@ -958,7 +973,8 @@ private:
                     statdetails << "Solutions " << solstats << ' ';
                     for (size_t i = 0; i < Farm::f().getMiners().size(); i++)
                     {
-                        if (i) statdetails << " ";
+                        if (i)
+                            statdetails << " ";
                         statdetails << "gpu" << i << ":" << solstats.getString(i);
                     }
                     minelog << statdetails.str();
@@ -972,7 +988,6 @@ private:
             {
                 minelog << "not-connected";
             }
-            interval = m_displayInterval;
         }
 
 #if API_CORE

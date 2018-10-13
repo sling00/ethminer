@@ -120,10 +120,7 @@ public:
      * @brief Get information on the progress of mining this work package.
      * @return The progress with mining so far.
      */
-    WorkingProgress const& miningProgress() const
-    {
-        return m_progress;
-    }
+    WorkingProgress const& miningProgress() const { return m_progress; }
 
     std::vector<std::shared_ptr<Miner>> getMiners() { return m_miners; }
 
@@ -134,7 +131,7 @@ public:
         return m_miners[index];
     }
 
-    SolutionStats getSolutionStats() { return m_solutionStats; } // returns a copy
+    SolutionStats getSolutionStats() { return m_solutionStats; }  // returns a copy
 
     void failedSolution(unsigned _miner_index) override { m_solutionStats.failed(_miner_index); }
 
@@ -152,7 +149,7 @@ public:
 
     void rejectedSolution(unsigned _miner_index) { m_solutionStats.rejected(_miner_index); }
 
-    using SolutionFound = std::function<void(const Solution&, unsigned)>;
+    using SolutionFound = std::function<void(const Solution&)>;
     using MinerRestart = std::function<void()>;
 
     /**
@@ -199,10 +196,10 @@ public:
      * @param _s The solution.
      * @param _miner_index Index of the miner
      */
-    void submitProof(Solution const& _s, unsigned _miner_index) override
+    void submitProof(Solution const& _s) override
     {
         assert(m_onSolutionFound);
-        m_onSolutionFound(_s, _miner_index);
+        m_onSolutionFound(_s);
     }
 
 private:
@@ -233,8 +230,8 @@ private:
     boost::asio::deadline_timer m_collectTimer;
     static const int m_collectInterval = 5000;
 
-    mutable SolutionStats m_solutionStats;
     std::chrono::steady_clock::time_point m_farm_launched = std::chrono::steady_clock::now();
+    mutable SolutionStats m_solutionStats;
 
     string m_pool_addresses;
 
@@ -262,4 +259,3 @@ private:
 
 }  // namespace eth
 }  // namespace dev
-

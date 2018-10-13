@@ -50,12 +50,13 @@ public:
     string ActiveEndPoint() override { return " [" + toString(m_endpoint) + "]"; };
 
     void submitHashrate(string const& rate) override;
-    void submitSolution(const Solution& solution, unsigned const& miner_index) override;
+    void submitSolution(const Solution& solution) override;
 
     h256 currentHeaderHash() { return m_current.header; }
     bool current() { return static_cast<bool>(m_current); }
 
 private:
+    bool fake_certificate_validation(bool preverified, boost::asio::ssl::verify_context& ctx);
     void disconnect_finalize();
     void enqueue_response_plea();
     std::chrono::milliseconds dequeue_response_plea();
